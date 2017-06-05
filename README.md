@@ -1,0 +1,2 @@
+# ReverseTCPShellAndroid
+通过shell进行反向tcp连接到服务器，进行服务器远程操作android底层linux系统
