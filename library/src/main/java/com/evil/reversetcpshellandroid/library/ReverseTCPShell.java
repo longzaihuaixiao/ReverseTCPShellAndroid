@@ -64,6 +64,7 @@ public class ReverseTCPShell {
     private static final int FEEDBACK = 3;
     private static final int STOP = 4;
 
+    private boolean alive = true;
     private String ip;
     private int port;
     private Socket socket;
@@ -217,12 +218,14 @@ public class ReverseTCPShell {
         } catch (IOException e) {
             e.printStackTrace();
         }
+        alive = false;
         connectListener.stopped();
     }
 
 
     synchronized public void stop() {
-        connectStopped();
+        if (alive)
+            connectStopped();
     }
 
 }
