@@ -143,6 +143,12 @@ public class ReverseTCPShell {
 
             @Override
             public void onError(Throwable t) {
+                try {
+                    commandReader.close();
+                    commandWriter.close();
+                } catch (IOException e) {
+                    e.printStackTrace();
+                }
                 connectStopped();
             }
 
