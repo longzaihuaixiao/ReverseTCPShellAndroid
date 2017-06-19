@@ -1,12 +1,6 @@
-package com.evil.reversetcpshellandroid.sample;
+package com.evil.reversetcpshellandroid.sample.model.bean;
 
-import android.databinding.BaseObservable;
 import android.databinding.ObservableArrayList;
-import android.databinding.ObservableField;
-import android.databinding.ObservableList;
-
-import java.util.ArrayList;
-import java.util.List;
 
 /**
  * Created by LongYH on 2017/6/15.

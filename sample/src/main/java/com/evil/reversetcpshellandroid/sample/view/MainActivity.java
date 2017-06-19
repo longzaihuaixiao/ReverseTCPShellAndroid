@@ -1,24 +1,19 @@
-package com.evil.reversetcpshellandroid.sample;
+package com.evil.reversetcpshellandroid.sample.view;
 
 import android.databinding.DataBindingUtil;
-import android.databinding.ViewDataBinding;
 import android.support.v7.app.AppCompatActivity;
 import android.os.Bundle;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.BaseAdapter;
-import android.widget.Button;
-import android.widget.EditText;
-import android.widget.ListView;
-import android.widget.TextView;
 
 import com.evil.reversetcpshellandroid.library.ConnectErrorListener;
 import com.evil.reversetcpshellandroid.library.ConnectListener;
 import com.evil.reversetcpshellandroid.library.ReverseTCPShell;
+import com.evil.reversetcpshellandroid.sample.R;
 import com.evil.reversetcpshellandroid.sample.databinding.ActivityMainBinding;
-
-import java.util.ArrayList;
-import java.util.List;
+import com.evil.reversetcpshellandroid.sample.databinding.LayoutListItemBinding;
+import com.evil.reversetcpshellandroid.sample.model.bean.History;
 
 public class MainActivity extends AppCompatActivity {
     private MyAdapter myAdapter;
@@ -124,6 +119,8 @@ public class MainActivity extends AppCompatActivity {
 
 
     public class MyAdapter extends BaseAdapter {
+        private LayoutListItemBinding binding;
+
         @Override
         public int getCount() {
             return history.historyList.size() >= 1 ? history.historyList.size() - 1 : 0;
@@ -141,10 +138,16 @@ public class MainActivity extends AppCompatActivity {
 
         @Override
         public View getView(int position, View convertView, ViewGroup parent) {
-            TextView textView = new TextView(parent.getContext());
-            textView.setTextSize(20f);
-            textView.setText(history.historyList.get(position + 1));
-            return textView;
+            if (convertView == null){
+                binding = DataBindingUtil.inflate(getLayoutInflater(), R.layout.layout_list_item
+                ,parent, false);
+                convertView = binding.getRoot();
+                convertView.setTag(binding);
+            }else {
+                binding = (LayoutListItemBinding) convertView.getTag();
+            }
+            binding.setText(history.historyList.get(position + 1));
+            return convertView;
         }
     }
 

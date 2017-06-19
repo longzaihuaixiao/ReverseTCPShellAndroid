@@ -3,7 +3,7 @@
 
     <data>
         <variable name="history"
-            type="com.evil.reversetcpshellandroid.sample.History" />
+            type="com.evil.reversetcpshellandroid.sample.model.bean.History" />
     </data>
 
     <LinearLayout
@@ -56,6 +56,7 @@
 
         <ListView
             android:id="@+id/list_view"
+
             android:layout_width="match_parent"
             android:layout_height="0dp"
             android:layout_weight="1" />
